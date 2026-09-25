@@ -21,14 +21,13 @@ DATA = Path(__file__).resolve().parent.parent / "data" / "kazakh_errors.json"
 
 # Every model you must run. Keep the order - it is the order of your table.
 MODELS = [
-    ("openrouter", "google/gemma-4-26b-a4b-it:free"),
-    ("openrouter", "qwen/qwen3.8-27b"),
-    ("openrouter", "deepseek/deepseek-v4-flash-0731"),
-    ("openai", "gpt-5.6-luna"),
-    ("openai", "gpt-5.6-terra"),
-    ("openai", "gpt-5.6-sol"),
+    #("openai", "gpt-5.6-luna"),
+    #("openai", "gpt-5.6-terra"),
+    #("openai", "gpt-5.6-sol"),
+    ("openrouter", "nex-n2.5-mini:free"),
+    ("openrouter", "laguna-s-2.1:free"),
+    ("openrouter", "nemotron-3-ultra-550b-a55b:free"),
 ]
-
 
 def load_sentences() -> list[dict]:
     """The eight corrupted sentences and their published originals."""
@@ -49,8 +48,17 @@ def build_prompt(corrupted: str) -> str:
     Asking for a fixed shape instead of prose is how you make six models
     comparable. Week 3 turns this into a topic.
     """
-    # TODO
-    raise NotImplementedError
+    return (
+        "The following Kazakh text has been damaged: some letters might be "
+        "swapped for similar-looking Russian or Latin letters, a hyphen "
+        "might be missing, two words might be joined together, or a letter "
+        "might be doubled by mistake.\n\n"
+        "Corrupted text: \"" + corrupted + "\"\n\n"
+        "Please correct it back to proper Kazakh and tell me what you "
+        "changed.\n\n"
+        "Answer ONLY with this JSON, nothing else, no ```json fences:\n"
+        '{"corrected": "...", "changes": ["...", "..."]}'
+    )
 
 
 def parse_response(text: str) -> dict:
@@ -60,8 +68,32 @@ def parse_response(text: str) -> dict:
     like. Be forgiving: find the JSON, parse it, and raise ValueError with the
     offending text if you truly cannot.
     """
-    # TODO
-    raise NotImplementedError
+    cleaned = text.strip()
+
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    try:
+        data = json.loads(cleaned)
+        return {"corrected": data["corrected"], "changes": data["changes"]}
+    except (json.JSONDecodeError, KeyError):
+        pass
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("No JSON found in model output: " + text)
+
+    json_part = cleaned[start:end + 1]
+    data = json.loads(json_part)
+
+    if "corrected" not in data or "changes" not in data:
+        raise ValueError("JSON is missing corrected/changes: " + text)
+
+    return {"corrected": data["corrected"], "changes": data["changes"]}
 
 
 def correct_with(model: str, corrupted: str, via: str) -> dict:
@@ -75,8 +107,16 @@ def correct_with(model: str, corrupted: str, via: str) -> dict:
     `ask_once` from sublab_easy - there is no conversation here, just one
     prompt and one reply, eight times per model.
     """
-    # TODO
-    raise NotImplementedError
+    prompt = build_prompt(corrupted)
+    reply = ask_once(prompt, model=model, via=via)
+    parsed = parse_response(reply["text"])
+    return {
+        "corrected": parsed["corrected"],
+        "changes": parsed["changes"],
+        "input_tokens": reply["input_tokens"],
+        "output_tokens": reply["output_tokens"],
+        "model": model,
+    }
 
 
 def score_correction(returned: str, expected: str) -> dict:
@@ -90,8 +130,17 @@ def score_correction(returned: str, expected: str) -> dict:
     the original still counts as a correction. Your written analysis is where
     you make that call.
     """
-    # TODO
-    raise NotImplementedError
+    exact = (returned == expected)
+
+    diff_count = 0
+    shorter = min(len(returned), len(expected))
+    for i in range(shorter):
+        if returned[i] != expected[i]:
+            diff_count += 1
+
+    diff_count += abs(len(returned) - len(expected))
+
+    return {"exact": exact, "char_diff": diff_count}
 
 
 def run_all() -> list[dict]:

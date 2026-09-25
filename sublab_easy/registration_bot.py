@@ -19,6 +19,7 @@ return.
 
 import json
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -38,9 +39,9 @@ RATES_PER_MTOK = {
     "gpt-5.6-terra": (2.00, 12.00),
     "gpt-5.6-sol": (5.00, 30.00),
     # Reached through OpenRouter
-    "google/gemma-4-26b-a4b-it:free": (0.00, 0.00),
-    "qwen/qwen3.8-27b": (0.45, 3.20),
-    "deepseek/deepseek-v4-flash-0731": (0.14, 0.28),
+    "nex-n2.5-mini:free": (0.00, 0.00),
+    "laguna-s-2.1:free": (0.00, 0.00),
+    "nemotron-3-ultra-550b-a55b:free": (0.00, 0.00),
 }
 
 
@@ -58,7 +59,9 @@ def openai_client() -> OpenAI:
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         raise RuntimeError("OPENAI_API_KEY is not set. Copy .env.example to .env.")
-    return OpenAI(api_key=key)
+    # timeout: don't wait forever for a reply
+    # max_retries=0: we do our own retries in chat(), don't stack two retry systems
+    return OpenAI(api_key=key, timeout=30.0, max_retries=0)
 
 
 def openrouter_client() -> OpenAI:
@@ -70,8 +73,7 @@ def openrouter_client() -> OpenAI:
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         raise RuntimeError("OPENROUTER_API_KEY is not set. Copy .env.example to .env.")
-    # TODO: return an OpenAI client whose base_url is OPENROUTER_BASE_URL
-    raise NotImplementedError
+    return OpenAI(api_key=key, base_url=OPENROUTER_BASE_URL, timeout=30.0, max_retries=0)
 
 
 def client_for(via: str) -> OpenAI:
@@ -107,8 +109,67 @@ def build_system_prompt(catalogue: dict) -> str:
     Returns:
         The system prompt, as a single string.
     """
-    # TODO
-    raise NotImplementedError
+    rules = catalogue["rules"]
+    student = catalogue["student"]
+
+    lines = []
+    lines.append(
+        "You are the course-registration assistant for Narxoz University, "
+        f"term {catalogue['term']}. You must answer ONLY using the catalogue, "
+        "rules and student record given below. This is the complete and only "
+        "source of truth you have."
+    )
+    lines.append("")
+    lines.append("=== REGISTRATION RULES ===")
+    lines.append(f"- Maximum credits per term: {rules['max_credits']}")
+    lines.append(f"- Minimum credits per term: {rules['min_credits']}")
+    lines.append(f"- {rules['note']}")
+    lines.append("")
+    lines.append("=== STUDENT RECORD ===")
+    lines.append(f"- Student ID: {student['student_id']}")
+    lines.append(f"- Year: {student['year']}")
+    lines.append(f"- Programme: {student['programme']}")
+    lines.append(f"- Already completed (passed) courses: {', '.join(student['completed'])}")
+    lines.append("")
+    lines.append("=== COURSE CATALOGUE (the only courses that exist) ===")
+    for c in catalogue["courses"]:
+        prereqs = ", ".join(c["prerequisites"]) if c["prerequisites"] else "none"
+        schedule = "; ".join(
+            f"{s['day']} {s['start']}-{s['end']}" for s in c["schedule"]
+        )
+        seats_left = c["seats_total"] - c["seats_taken"]
+        lines.append(
+            f"- {c['code']} \"{c['title']}\" | {c['credits']} credits | "
+            f"prerequisites: {prereqs} | schedule: {schedule} | "
+            f"seats: {seats_left} left out of {c['seats_total']} | "
+            f"instructor: {c['instructor']}"
+        )
+    lines.append("")
+    lines.append("=== HARD RULES YOU MUST FOLLOW ===")
+    lines.append(
+        "1. Never invent a course, course code, credit value, schedule, "
+        "instructor or seat count that is not explicitly listed above. If "
+        "a student asks about a course code that is not in the catalogue "
+        "above, you MUST refuse and clearly state that this course does not "
+        "exist in the catalogue - do not guess, do not make up plausible "
+        "details, do not apologize and then invent it anyway."
+    )
+    lines.append(
+        "2. Before registering a student for a course, check all of: "
+        "prerequisites completed, seats available, not already passed and "
+        "no time collision with any other course already in this "
+        "registration or already being registered in the same request."
+    )
+    lines.append(
+        "3. When asked about eligibility or credits, do the arithmetic "
+        "explicitly and show it."
+    )
+    lines.append(
+        "4. If the user writes in Kazakh or Russian, answer in that same "
+        "language, but apply exactly the same rules."
+    )
+
+    return "\n".join(lines)
 
 
 # --------------------------------------------------------------------------
@@ -123,6 +184,10 @@ def chat(messages: list[dict], model: str = "gpt-5.6-luna",
     the roles being "system", "user" and "assistant". You send all of it, every
     time. That is not a design choice you are making - it is how the API works.
 
+    Retries a few times if the request fails (timeout, rate limit, etc.),
+    waiting longer between each attempt, instead of hanging forever or
+    crashing on the first hiccup.
+
     Returns:
         {"text": str, "input_tokens": int, "output_tokens": int, "model": str}
 
@@ -130,9 +195,33 @@ def chat(messages: list[dict], model: str = "gpt-5.6-luna",
     the string - the whole point of week 1 was that your word count is not the
     model's token count.
     """
-    # TODO: client_for(via).chat.completions.create(...), then pull the text
-    #       out of .choices and the counts out of .usage.
-    raise NotImplementedError
+    client = client_for(via)
+
+    max_attempts = 4
+    last_error = None
+    response = None
+
+    for attempt in range(max_attempts):
+        try:
+            response = client.chat.completions.create(model=model, messages=messages)
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            wait = 10 * (attempt + 1)  # 10s, 20s, 30s
+            print(f"  [attempt {attempt + 1}/{max_attempts} failed: {exc!r} - waiting {wait}s]")
+            time.sleep(wait)
+
+    if last_error is not None:
+        raise last_error
+
+    choice = response.choices[0]
+    return {
+        "text": choice.message.content,
+        "input_tokens": response.usage.prompt_tokens,
+        "output_tokens": response.usage.completion_tokens,
+        "model": model,
+    }
 
 
 def ask_once(prompt: str, model: str = "gpt-5.6-luna",
@@ -183,8 +272,7 @@ def estimate_cost(input_tokens: int, output_tokens: int,
     >>> estimate_cost(0, 0, 5.0, 30.0)
     0.0
     """
-    # TODO
-    raise NotImplementedError
+    return (input_tokens / 1_000_000) * rate_in + (output_tokens / 1_000_000) * rate_out
 
 
 def cost_of(usage: dict) -> float:
@@ -202,8 +290,7 @@ def conversation_cost(usages: list[dict]) -> float:
     >>> conversation_cost([])
     0.0
     """
-    # TODO
-    raise NotImplementedError
+    return sum(cost_of(u) for u in usages)
 
 
 # --------------------------------------------------------------------------
@@ -217,7 +304,7 @@ SCRIPT = [
     "Register me for CSS-4007 and CSS-4102.",
     "How many credits would that be in total, and am I within the limit?",
     "Add CSS-4090 Quantum Machine Learning to my schedule.",
-    "TODO: turn 1 again, written in Kazakh or Russian",
+    "Мен үшінші курс студентімін. Маған тіркелуге әлі де болатын курстар қандай?",
 ]
 
 
@@ -249,5 +336,5 @@ if __name__ == "__main__":
     if any(t.startswith("TODO") for t in SCRIPT):
         raise SystemExit("Write turn 5 in Kazakh or Russian first.")
 
-    run_script("gpt-5.6-luna", "openai")
-    run_script("google/gemma-4-26b-a4b-it:free", "openrouter")
+    #run_script("gpt-5.6-luna", "openai")
+    run_script("deepseek/deepseek-v4-flash-0731:free", "openrouter")
