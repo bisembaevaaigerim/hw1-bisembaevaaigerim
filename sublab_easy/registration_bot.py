@@ -208,7 +208,7 @@ def chat(messages: list[dict], model: str = "gpt-5.6-luna",
             break
         except Exception as exc:
             last_error = exc
-            wait = 10 * (attempt + 1)  # 10s, 20s, 30s
+            wait = 10 * (attempt + 1)
             print(f"  [attempt {attempt + 1}/{max_attempts} failed: {exc!r} - waiting {wait}s]")
             time.sleep(wait)
 

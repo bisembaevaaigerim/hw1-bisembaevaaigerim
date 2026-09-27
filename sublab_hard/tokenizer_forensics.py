@@ -115,12 +115,15 @@ def first_divergence(a: list[int], b: list[int]) -> int | None:
     >>> first_divergence([1, 2], [1, 2, 3])
     2
     """
-    for i, (x, y) in enumerate(zip(a, b)):
-        if x != y:
-            return i
-    if len(a) == len(b):
+    if a == b:
         return None
-    return min(len(a), len(b))
+
+    shorter = min(len(a), len(b))
+    for i in range(shorter):
+        if a[i] != b[i]:
+            return i
+
+    return shorter
 
 
 def foreign_chars(text: str) -> list[tuple[int, str, str]]:
@@ -141,17 +144,13 @@ def foreign_chars(text: str) -> list[tuple[int, str, str]]:
     []
     """
     result = []
-    for i, ch in enumerate(text):
-        if not ch.isalpha():
-            continue
-        try:
-            name = unicodedata.name(ch)
-        except ValueError:
-            name = "<UNKNOWN>"
-        if "CYRILLIC" not in name:
-            result.append((i, ch, name))
+    for i in range(len(text)):
+        ch = text[i]
+        if ch.isalpha():
+            name = unicodedata.name(ch, "UNKNOWN")
+            if "CYRILLIC" not in name:
+                result.append((i, ch, name))
     return result
-
 
 # --------------------------------------------------------------------------
 # A. The price of a language
@@ -266,6 +265,7 @@ if __name__ == "__main__":
         for lang in LANGS:
             print("    %s costs %.2fx English"
                   % (lang, table[lang]["tok_per_char"] / base))
+
 
     print("\n=== B. what a Latin homoglyph does to the token stream ===")
     show_homoglyphs("o200k_base")

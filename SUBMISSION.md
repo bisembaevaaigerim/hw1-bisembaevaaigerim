@@ -1,18 +1,18 @@
 # HW1 submission
 
-**Name:**
-**Student ID:**
-**Group:**
-**Repository:**
+**Name: Bissembayeva Aigerim**
+**Student ID: S23068855**
+**Group: ENG-1**
+**Repository: hw1-bisembaevaaigerim**
 
 ## AI tool disclosure
 
 State which AI tools you used and for what. Expected and fine; undisclosed use
 is not.
 
-> I used Claude and ChatGPT to understand the starter code provided by the teacher and to learn how to implement correctly the #TODO functions in registration_bot.py, correct_kazakh.py and tokenizer_forensics.py.
-> I also used them to understand errors during the runs, such as the RateLimitError from OpenRouter.
-> I ran all the scripts myself using my own API keys. All numbers in the tables come from my own runs and I wrote code and all the written answers myself based on my actual results.
+> I used Claude and ChatGPT throughout the assignment. I used them to understand the starter code provided by the teacher and to implement the #TODO functions in `registration_bot.py`, `correct_kazakh.py`, and `tokenizer_forensics.py`. I also used Claude to add and understand additional error-handling logic in `registration_bot.py`, including the `timeout=30.0` setting, `max_retries=0`, and the retry logic for API errors. 
+> Claude and ChatGPT also helped me understand errors during the runs, such as the `RateLimitError` from OpenRouter, and helped me understand and fix issues in my code.
+> I ran all the scripts myself using my own API keys and checked the results. All numbers in the tables come from my own runs. The written answers and explanations were based on my actual results and my understanding of the code.
 
 ---
 
@@ -113,40 +113,56 @@ Paste the per-model summary printed by `correct_kazakh.py`:
 
 | Model | Exact | Failed | Tokens | Cost $ |
 |---|---|---|---|---|
+| gpt-5.6-luna | 8 | 0 | 3964 | 0.00378 |
+| gpt-5.6-terra | 4 | 0 | 2996 | 0.02623 |
+| gpt-5.6-sol | 7 | 0 | 2628 | 0.05454 |
 | nex-n2.5-mini:free | 5 | 0 | 14140 | 0.00000 |
 | laguna-s-2.1:free | 0 | 0 | 3708 | 0.00000 |
 | nemotron-3-ultra-550b-a55b:free | 2 | 2 | 14026 | 0.00000 |
-| gpt-5.6-luna | 6 | 0 | 3612 | 0.00336 |
-| gpt-5.6-terra | 4 | 0 | 2829 | 0.02423 |
-| gpt-5.6-sol | 7 | 0 | 2783 | 0.05919 |
+
 ### Which error types did each model repair?
 
 Rows are error labels, columns are models. Write "yes", "no" or "partial".
 
-| Error type | nex-n2.5-mini | laguna-s-2.1 | nemotron-3-ultra | luna | terra | sol |
+| Error type | luna | terra | sol | nex-n2.5-mini | laguna-s-2.1 | nemotron-3-ultra |
 |---|---|---|---|---|---|---|
-| kaz_to_rus | partial | no | no | yes | partial | yes |
-| latin_homoglyph | yes | no | partial | yes | partial | yes |
-| drop_hyphen | yes | no | no | yes | yes | yes |
-| join_words | yes | no | partial | yes | yes | yes |
-| double_letter | yes | no | partial | yes | yes | yes |
+| kaz_to_rus | yes | yes | yes | yes | no | partial |
+| latin_homoglyph | yes | yes | yes | yes | partial | partial |
+| drop_hyphen | yes | yes | yes | yes | no | no |
+| join_words | yes | yes | yes | yes | partial | partial |
+| double_letter | yes | yes | yes | yes | partial | partial |
 
 **The `latin_homoglyph` row: what happened?** Describe what you observed. The
 explanation is Sublab Harder's job, not this one's.
 
-> Among the three OpenAI models, two (luna and sol) corrected both phrases containing Latin homoglyphs (KZ-03 and KZ-08), matching the original exactly. Terra corrected KZ-08 accurately but added extra punctuation marks (a comma and a question mark) in KZ-03, although the substitution of Latin letters with Cyrillic ones was performed correctly in all instances.
-> Among the three openrouter models, the results were more mixed. `nex-n2.5-mini` corrected the Latin letters correctly in both sentences, but also added a comma and a question mark in KZ-03, the same pattern as terra. `nemotron-3-ultra` found the right letters to fix in both sentences, but each time it also changed something else that was not part of the corruption (it dropped a letter in KZ-03 and changed a word in KZ-08), so the core substitution was right but the output was not clean. `laguna-s-2.1` was the weakest: in KZ-03 it produced a different, garbled word instead of fixing the Latin letters, and in KZ-08 it invented an extra syllable that was not in the original word at all.
+> All three OpenAI models replaced all latin letters with cyrillic letters in both sentences (KZ-03 and KZ-08). 
+> Luna and sol matched the original exactly. 
+> Terra matched KZ-08 exactly, but added a comma and a question mark to KZ-03. 
+> Nex-n2.5-mini also fixed the letters correctly in both sentences, but added extra punctuation to KZ-03. 
+> Nemotron-3-ultra fixed the Latin letters, but also changed parts that were not damaged. 
+> In KZ-03, it removed the letter «я» from «Алақтарға». 
+> In KZ-08, it split «Ынмен» and changed «кездескісі» to «кездесуі». 
+> Laguna-s-2.1 had more problems. In KZ-03, it produced a non-existent word, «Алхақтарға». 
+> In KZ-08, it fixed the Latin letters but changed «Ынмен» to «Ынменен».
 
 **Where a model returned good Kazakh that was not identical to the original,
 say so here.** Exact match is not correctness.
 
-> KZ-04 (luna, terra, sol) and KZ-05 (luna, terra) - all needed letters and words were corrected correctly, but the question mark is missing at the end of the sentence, even though the sentence is a question.
-> I consider this a good correction: the `char_diff` is only 1 in these cases, and the text is grammatically correct. It is only different in punctuation.
-> `nex-n2.5-mini` on KZ-03 is another example: it fixed all three Latin letters correctly and only added a comma and a question mark that were not in the original. The `char_diff` is 17 because of this punctuation, but the actual correction (fixing the homoglyphs) was done right.
+> Terra added a question mark to KZ-04 and KZ-05, and a comma and a question mark to KZ-03. 
+> Sol added a question mark to KZ-04. 
+> Nex added a comma and a question mark to KZ-03 and changed «Елорда» to uppercase in KZ-07.
+> In all these cases, the damaged letters and words were corrected. 
+> The only differences were punctuation or letter case.
+> In KZ-01, Terra and Nex wrote «елшілерінен» (“from the ambassadors”) instead of «елшісінен» (“from the ambassador”). 
+> This is also correct Kazakh and can be considered natural after «бірқатар мемлекеттің».
+> However, it received `char_diff = 33` because the positional comparison counts many characters as different after the word changes.
+> This is a good example of how `char_diff` can make a small difference look like a bigger error. 
+> Terra's 4/8 exact score does not show that it corrected all eight sentences.
+
 
 **Cheapest model that was good enough, and why:**
 
-> Among the three OpenAI models, the cheapest one is `gpt-5.6-luna` ($0.00336 for all 8 sentences). It gave 6/8 exact matches, which is almost the same as the most expensive model, `gpt-5.6-sol` (7/8 for $0.05919, about 17 times more expensive).
+> Among the three OpenAI models, the cheapest one is `gpt-5.6-luna` ($0.00336 for all 8 sentences). It gave 8/8 exact matches, which is almost the same as the most expensive model, `gpt-5.6-sol` (7/8 for $0.05919, about 17 times more expensive).
 
 
 ---

@@ -21,12 +21,12 @@ DATA = Path(__file__).resolve().parent.parent / "data" / "kazakh_errors.json"
 
 # Every model you must run. Keep the order - it is the order of your table.
 MODELS = [
-    #("openai", "gpt-5.6-luna"),
-    #("openai", "gpt-5.6-terra"),
-    #("openai", "gpt-5.6-sol"),
-    ("openrouter", "nex-n2.5-mini:free"),
-    ("openrouter", "laguna-s-2.1:free"),
-    ("openrouter", "nemotron-3-ultra-550b-a55b:free"),
+    ("openai", "gpt-5.6-luna"),
+    ("openai", "gpt-5.6-terra"),
+    ("openai", "gpt-5.6-sol"),
+    #("openrouter", "nex-n2.5-mini:free"),
+    #("openrouter", "laguna-s-2.1:free"),
+    #("openrouter", "nemotron-3-ultra-550b-a55b:free"),
 ]
 
 def load_sentences() -> list[dict]:
@@ -188,6 +188,6 @@ if __name__ == "__main__":
     summarise(out)
     dest = Path(__file__).resolve().parent.parent / "outputs"
     dest.mkdir(exist_ok=True)
-    (dest / "corrections.json").write_text(
+    (dest / "corrections_openai.json").write_text(
         json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nwrote outputs/corrections.json ({len(out)} rows)")
